@@ -1,7 +1,7 @@
 /**
  * HybridVault AI — app.js
  * Hybrid AI Document & Note Studio
- * Firebase AI Logic SDK + Chrome Gemini Nano + Cloud Gemini 2.5 Flash
+ * Firebase AI Logic SDK + Chrome Gemini Nano + Cloud Gemini 3.8 Flash
  *
  * Google #BuildHybridAI 2026 Hackathon — Web / Chrome category
  * Apache-2.0 License
@@ -163,7 +163,7 @@ HybridEdge is a client-side AI runtime abstraction layer that orchestrates infer
     
     PREFER_IN_CLOUD / ONLY_IN_CLOUD:
       1. Bypass on-device check; send directly to Firebase AI Logic
-      2. Use gemini-2.5-flash model via GoogleAIBackend
+      2. Use gemini-3.8-flash model via GoogleAIBackend
 
 2.2 DocumentVault
   Storage: localStorage with JSON serialization
@@ -180,7 +180,7 @@ HybridEdge is a client-side AI runtime abstraction layer that orchestrates infer
   SDK: firebase-ai.js v12.6.0 (gstatic CDN)
   Backend: GoogleAIBackend
   Model config:
-    Cloud: { model: "gemini-2.5-flash" }
+    Cloud: { model: "gemini-3.8-flash" }
     On-device: { onDeviceParams: { temperature: 0.7, topK: 40 } }
   App Check: ReCaptchaEnterpriseProvider with debug token for CI/CD
 
@@ -706,7 +706,7 @@ function getHybridModel(modeOverride) {
 
   const modelConfig = {
     mode,
-    inCloudParams: { model: "gemini-2.5-flash" },
+    inCloudParams: { model: "gemini-3.8-flash" },
     onDeviceParams: {
       temperature: 0.7,
       topK: 40
@@ -958,7 +958,7 @@ function updateTelemetryUI(source, latencyMs, charCount) {
     dom.sourceLabel.textContent = "ON-DEVICE GEMINI NANO";
   } else {
     badge.className = "tel-badge source-cloud";
-    dom.sourceLabel.textContent = "CLOUD GEMINI 2.5 FLASH";
+    dom.sourceLabel.textContent = "CLOUD GEMINI 3.8 FLASH";
   }
 }
 

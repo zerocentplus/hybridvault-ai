@@ -4,7 +4,7 @@
 *Google #BuildHybridAI 2026 Hackathon — Web / Chrome category*
 
 [![Firebase AI Logic](https://img.shields.io/badge/Firebase_AI_Logic-11.10.0-orange)](https://firebase.google.com/docs/ai-logic)
-[![Gemini 2.5 Flash](https://img.shields.io/badge/Gemini-2.5_Flash-blue)](https://ai.google.dev/)
+[![Gemini 3.8 Flash](https://img.shields.io/badge/Gemini-3.8_Flash-blue)](https://ai.google.dev/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-green)](LICENSE)
 [![Build](https://img.shields.io/badge/Build-Zero_Step-purple)](https://pages.github.com/)
 
@@ -12,7 +12,7 @@
 
 ## Overview
 
-HybridVault AI is a privacy-first document and note studio that routes AI inference dynamically between **on-device Gemini Nano** (Chrome Built-in AI) and **Cloud Gemini 2.5 Flash** (Firebase AI Logic) based on content sensitivity, user preference, and hardware capability. It runs entirely from static files — no build step, no bundler, no server.
+HybridVault AI is a privacy-first document and note studio that routes AI inference dynamically between **on-device Gemini Nano** (Chrome Built-in AI) and **Cloud Gemini 3.8 Flash** (Firebase AI Logic) based on content sensitivity, user preference, and hardware capability. It runs entirely from static files — no build step, no bundler, no server.
 
 ---
 
@@ -36,7 +36,7 @@ HybridVault AI is a privacy-first document and note studio that routes AI infere
         ▼                        ▼
 ┌───────────────────┐   ┌────────────────────────┐
 │   ON-DEVICE        │   │   CLOUD                │
-│   Gemini Nano      │   │   Gemini 2.5 Flash     │
+│   Gemini Nano      │   │   Gemini 3.8 Flash     │
 │   Chrome Built-in  │   │   Firebase AI Logic    │
 │   Zero network     │   │   App Check verified   │
 │   Max privacy      │   │   Complex reasoning    │
@@ -65,11 +65,11 @@ HybridVault AI is a privacy-first document and note studio that routes AI infere
 ### Hybrid AI Routing
 - **Auto Hybrid (Prefer On-Device)** — `InferenceMode.PREFER_ON_DEVICE`: tries Gemini Nano first, falls back to cloud
 - **Strict On-Device** — `InferenceMode.ONLY_ON_DEVICE`: Gemini Nano, zero network calls
-- **Cloud Deep Reasoning** — `InferenceMode.PREFER_IN_CLOUD`: Gemini 2.5 Flash for complex tasks
+- **Cloud Deep Reasoning** — `InferenceMode.PREFER_IN_CLOUD`: Gemini 3.8 Flash for complex tasks
 - **Cloud Only** — `InferenceMode.ONLY_IN_CLOUD`: always cloud, maximum capability
 
 ### Live Telemetry Header
-- Active inference source badge: **ON-DEVICE GEMINI NANO** vs **CLOUD GEMINI 2.5 FLASH**
+- Active inference source badge: **ON-DEVICE GEMINI NANO** vs **CLOUD GEMINI 3.8 FLASH**
 - Last inference latency (ms)
 - Response character count
 - Firebase App Check verification status
@@ -135,7 +135,7 @@ For the `ONLY_ON_DEVICE` / `PREFER_ON_DEVICE` modes to run inference locally:
 5. Relaunch Chrome
 6. Wait for the Gemini Nano model to download (check `chrome://components` → "Optimization Guide On Device Model")
 
-Without these flags, `PREFER_ON_DEVICE` automatically falls back to Cloud Gemini 2.5 Flash.
+Without these flags, `PREFER_ON_DEVICE` automatically falls back to Cloud Gemini 3.8 Flash.
 
 ---
 
@@ -208,7 +208,7 @@ hybridvault-ai/
 | Runtime | Pure Vanilla ES Modules (no bundler) |
 | AI SDK | Firebase AI Logic 11.10.0 (gstatic CDN) |
 | On-Device AI | Chrome Built-in AI / Gemini Nano |
-| Cloud AI | Gemini 2.5 Flash via Google AI Backend |
+| Cloud AI | Gemini 3.8 Flash via Google AI Backend |
 | App Security | Firebase App Check (CustomProvider + debug token) |
 | Storage | Browser `localStorage` |
 | Hosting | Firebase Hosting / GitHub Pages |

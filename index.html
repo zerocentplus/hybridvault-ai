@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="HybridVault AI — Hybrid AI Document & Note Studio powered by Firebase AI Logic with on-device Gemini Nano and Cloud Gemini 2.5 Flash" />
+  <meta name="description" content="HybridVault AI — Hybrid AI Document & Note Studio powered by Firebase AI Logic with on-device Gemini Nano and Cloud Gemini 3.8 Flash" />
   <title>HybridVault AI — Hybrid AI Document Studio</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -29,8 +29,8 @@
       <select id="inference-mode" title="Select AI inference routing mode">
         <option value="prefer_on_device">⚡ Auto Hybrid (Prefer On-Device)</option>
         <option value="only_on_device">🔒 Strict On-Device (Gemini Nano)</option>
-        <option value="prefer_in_cloud">☁️ Cloud Deep Reasoning (Gemini 2.5 Flash)</option>
-        <option value="only_in_cloud">🌐 Cloud Only (Gemini 2.5 Flash)</option>
+        <option value="prefer_in_cloud">☁️ Cloud Deep Reasoning (Gemini 3.8 Flash)</option>
+        <option value="only_in_cloud">🌐 Cloud Only (Gemini 3.8 Flash)</option>
       </select>
     </div>
 
@@ -107,7 +107,7 @@
         id="doc-content"
         placeholder="Start writing your document… paste confidential notes, field observations, technical specs, or any content you want to analyze with AI.
 
-HybridVault AI will route your analysis to on-device Gemini Nano for maximum privacy, or to Cloud Gemini 2.5 Flash for deep reasoning — based on your selected inference mode."
+HybridVault AI will route your analysis to on-device Gemini Nano for maximum privacy, or to Cloud Gemini 3.8 Flash for deep reasoning — based on your selected inference mode."
         spellcheck="true"
       ></textarea>
     </div>
@@ -153,7 +153,7 @@ HybridVault AI will route your analysis to on-device Gemini Nano for maximum pri
         <button class="ai-action-btn cloud" data-action="synthesis" title="Deep multi-step cloud reasoning">
           <span class="action-icon">☁️</span>
           <span class="action-label">Deep Cloud Synthesis</span>
-          <span class="action-desc">Gemini 2.5 Flash multi-step reasoning</span>
+          <span class="action-desc">Gemini 3.8 Flash multi-step reasoning</span>
           <span class="action-mode-tag cloud">CLOUD</span>
         </button>
 
@@ -231,7 +231,7 @@ HybridVault AI will route your analysis to on-device Gemini Nano for maximum pri
           </div>
           <div class="diag-card">
             <div class="diag-card-label">Cloud Model</div>
-            <div class="diag-card-value info">gemini-2.5-flash</div>
+            <div class="diag-card-value info">gemini-3.8-flash</div>
           </div>
           <div class="diag-card">
             <div class="diag-card-label">Backend</div>
@@ -313,7 +313,7 @@ HybridVault AI will route your analysis to on-device Gemini Nano for maximum pri
     ▼                        ▼
 <span class="hl-green">┌─────────────────┐</span>    <span class="hl-cyan">┌──────────────────────┐</span>
 <span class="hl-green">│  ON-DEVICE       │</span>    <span class="hl-cyan">│   CLOUD              │</span>
-<span class="hl-green">│  Gemini Nano     │</span>    <span class="hl-cyan">│   Gemini 2.5 Flash   │</span>
+<span class="hl-green">│  Gemini Nano     │</span>    <span class="hl-cyan">│   Gemini 3.8 Flash   │</span>
 <span class="hl-green">│  Chrome Built-in │</span>    <span class="hl-cyan">│   Firebase AI Logic  │</span>
 <span class="hl-green">│  Zero network    │</span>    <span class="hl-cyan">│   App Check verified │</span>
 <span class="hl-green">│  Max privacy     │</span>    <span class="hl-cyan">│   Complex reasoning  │</span>
