@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="HybridVault AI — Hybrid AI Document & Note Studio powered by Firebase AI Logic with on-device Gemini Nano and Cloud Gemini 2.5 Flash" />
+  <title>HybridVault AI — Hybrid AI Document Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══════════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════════ -->
+  <header id="header">
+    <div class="header-logo">
+      <div class="logo-icon">🔐</div>
+      <span class="logo-text">HybridVault AI</span>
+      <span class="logo-badge">HACKATHON</span>
+    </div>
+
+    <div class="mode-selector-wrap">
+      <span class="label-xs">Inference Mode</span>
+      <select id="inference-mode" title="Select AI inference routing mode">
+        <option value="prefer_on_device">⚡ Auto Hybrid (Prefer On-Device)</option>
+        <option value="only_on_device">🔒 Strict On-Device (Gemini Nano)</option>
+        <option value="prefer_in_cloud">☁️ Cloud Deep Reasoning (Gemini 2.5 Flash)</option>
+        <option value="only_in_cloud">🌐 Cloud Only (Gemini 2.5 Flash)</option>
+      </select>
+    </div>
+
+    <div class="header-sep"></div>
+
+    <!-- Live Telemetry Bar -->
+    <div id="telemetry-bar">
+      <div id="source-badge" class="tel-badge source-idle">
+        <div class="dot"></div>
+        <span id="source-label">IDLE</span>
+      </div>
+
+      <div class="tel-stat" title="Last inference latency">
+        ⏱ <span id="latency-val">—</span> ms
+      </div>
+
+      <div class="tel-stat" title="Token / character count of last response">
+        🔤 <span id="token-val">—</span> chars
+      </div>
+
+      <div id="appcheck-status" class="appcheck-badge unverified" title="Firebase App Check status">
+        🛡 <span id="appcheck-label">CHECKING…</span>
+      </div>
+
+      <!-- Diagnostics toggle -->
+      <button class="btn-icon" id="diag-toggle-btn" title="Hybrid Architecture & Diagnostics">🔬</button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════
+       SIDEBAR
+  ══════════════════════════════════════════════════════ -->
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <h2>Document Vault</h2>
+      <button class="btn-new-note" id="new-note-btn">
+        <span>＋</span> New Note
+      </button>
+    </div>
+
+    <div class="sidebar-search">
+      <div class="search-input-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="doc-search" placeholder="Search documents…" autocomplete="off" />
+      </div>
+    </div>
+
+    <div class="docs-list" id="docs-list">
+      <!-- Documents rendered by JS -->
+    </div>
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════
+       EDITOR
+  ══════════════════════════════════════════════════════ -->
+  <main id="editor-area">
+    <div class="editor-toolbar">
+      <input
+        type="text"
+        id="doc-title"
+        class="doc-title-input"
+        placeholder="Document title…"
+        autocomplete="off"
+      />
+
+      <div class="sensitivity-indicator low" id="sensitivity-indicator">
+        <div class="dot"></div>
+        <span id="sensitivity-label">LOW SENSITIVITY</span>
+      </div>
+    </div>
+
+    <div class="editor-main">
+      <textarea
+        id="doc-content"
+        placeholder="Start writing your document… paste confidential notes, field observations, technical specs, or any content you want to analyze with AI.
+
+HybridVault AI will route your analysis to on-device Gemini Nano for maximum privacy, or to Cloud Gemini 2.5 Flash for deep reasoning — based on your selected inference mode."
+        spellcheck="true"
+      ></textarea>
+    </div>
+
+    <div class="editor-statusbar">
+      <div class="stat-pill">Words: <span id="word-count">0</span></div>
+      <div class="stat-pill">Chars: <span id="char-count">0</span></div>
+      <div class="stat-pill">Lines: <span id="line-count">1</span></div>
+      <div class="save-status saved" id="save-status">✓ Saved</div>
+    </div>
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════
+       AI PANEL
+  ══════════════════════════════════════════════════════ -->
+  <aside id="ai-panel">
+    <div class="ai-panel-header">
+      <div class="ai-panel-title">
+        <span class="icon">✦</span> Hybrid AI Studio
+      </div>
+      <div class="ai-panel-subtitle">Firebase AI Logic · On-Device + Cloud</div>
+    </div>
+
+    <div class="ai-panel-body">
+
+      <!-- Quick AI Actions -->
+      <div class="ai-actions-grid">
+
+        <button class="ai-action-btn private" data-action="summarize" title="Summarize with on-device AI for maximum privacy">
+          <span class="action-icon">🔒</span>
+          <span class="action-label">Private Local Summary</span>
+          <span class="action-desc">Zero-cloud, on-device Gemini Nano</span>
+          <span class="action-mode-tag on-device">ON-DEVICE</span>
+        </button>
+
+        <button class="ai-action-btn extract" data-action="extract" title="Extract action items as structured JSON">
+          <span class="action-icon">📋</span>
+          <span class="action-label">Extract Action Items (JSON)</span>
+          <span class="action-desc">Structured task extraction</span>
+          <span class="action-mode-tag hybrid">HYBRID</span>
+        </button>
+
+        <button class="ai-action-btn cloud" data-action="synthesis" title="Deep multi-step cloud reasoning">
+          <span class="action-icon">☁️</span>
+          <span class="action-label">Deep Cloud Synthesis</span>
+          <span class="action-desc">Gemini 2.5 Flash multi-step reasoning</span>
+          <span class="action-mode-tag cloud">CLOUD</span>
+        </button>
+
+        <button class="ai-action-btn translate" data-action="translate" title="Translate and polish document tone">
+          <span class="action-icon">🌐</span>
+          <span class="action-label">Translate &amp; Tone Polish</span>
+          <span class="action-desc">Language &amp; style refinement</span>
+          <span class="action-mode-tag hybrid">HYBRID</span>
+        </button>
+
+      </div>
+
+      <!-- Custom Prompt -->
+      <div class="custom-prompt-section">
+        <div class="section-label">✦ Custom Prompt</div>
+        <textarea
+          id="custom-prompt"
+          placeholder="Ask anything about the current document…&#10;e.g. &quot;What are the key risks mentioned?&quot;"
+        ></textarea>
+        <button class="btn-run-prompt" id="run-custom-btn">
+          <span>✦ Run with Hybrid AI</span>
+        </button>
+      </div>
+
+      <!-- AI Output -->
+      <div class="ai-output-section">
+        <div class="output-header">
+          <span class="output-action-name" id="output-action-label">AI Output</span>
+          <button class="output-copy-btn" id="copy-output-btn">📋 Copy</button>
+        </div>
+        <div id="ai-output-box">
+          <span style="color: var(--text-muted); font-style: italic;">
+            Select a document and click an AI action above to get started.
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div><!-- /#app -->
+
+<!-- ══════════════════════════════════════════════════════
+     DIAGNOSTICS MODAL
+══════════════════════════════════════════════════════ -->
+<div id="diag-overlay" role="dialog" aria-modal="true" aria-labelledby="diag-title">
+  <div class="diag-modal">
+    <div class="diag-header">
+      <span style="font-size:20px;">🔬</span>
+      <h2 id="diag-title">Hybrid Architecture &amp; Diagnostics</h2>
+      <button class="diag-close" id="diag-close-btn" aria-label="Close diagnostics">✕</button>
+    </div>
+
+    <div class="diag-body">
+
+      <!-- Firebase SDK Status -->
+      <div class="diag-section">
+        <h3>🔥 Firebase AI Logic SDK</h3>
+        <div class="diag-grid">
+          <div class="diag-card">
+            <div class="diag-card-label">SDK Version</div>
+            <div class="diag-card-value info" id="d-sdk-version">11.10.0</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">App Initialized</div>
+            <div class="diag-card-value" id="d-app-init">Checking…</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">App Check</div>
+            <div class="diag-card-value" id="d-appcheck">Checking…</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Debug Token</div>
+            <div class="diag-card-value info" id="d-debug-token">1111…5555</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Cloud Model</div>
+            <div class="diag-card-value info">gemini-2.5-flash</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Backend</div>
+            <div class="diag-card-value info">GoogleAIBackend</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chrome Built-in AI -->
+      <div class="diag-section">
+        <h3>⚡ Chrome Built-in AI (On-Device)</h3>
+        <div class="diag-grid">
+          <div class="diag-card">
+            <div class="diag-card-label">window.ai API</div>
+            <div class="diag-card-value" id="d-window-ai">Detecting…</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">LanguageModel API</div>
+            <div class="diag-card-value" id="d-language-model">Detecting…</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Availability</div>
+            <div class="diag-card-value" id="d-ai-availability">Detecting…</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Gemini Nano</div>
+            <div class="diag-card-value" id="d-gemini-nano">Detecting…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Session -->
+      <div class="diag-section">
+        <h3>📊 Session Telemetry</h3>
+        <div class="diag-grid">
+          <div class="diag-card">
+            <div class="diag-card-label">Total Inferences</div>
+            <div class="diag-card-value info" id="d-total-inferences">0</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">On-Device Count</div>
+            <div class="diag-card-value ok" id="d-ondevice-count">0</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Cloud Count</div>
+            <div class="diag-card-value info" id="d-cloud-count">0</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Avg Latency</div>
+            <div class="diag-card-value" id="d-avg-latency">—</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Vault Documents</div>
+            <div class="diag-card-value info" id="d-doc-count">0</div>
+          </div>
+          <div class="diag-card">
+            <div class="diag-card-label">Current Mode</div>
+            <div class="diag-card-value info" id="d-current-mode">Auto Hybrid</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Architecture Diagram -->
+      <div class="diag-section">
+        <h3>🏗 Hybrid Routing Architecture</h3>
+        <div class="arch-diagram" id="arch-diagram">
+┌─────────────────────────────────────────────────────────────┐
+│                    <span class="hl-blue">HybridVault AI</span>                           │
+│              Firebase AI Logic SDK 11.10.0                  │
+└──────────────────────┬──────────────────────────────────────┘
+                       │  User Request
+           ┌───────────▼───────────┐
+           │   <span class="hl-purple">Hybrid Router</span>           │
+           │  InferenceMode enum   │
+           └────┬──────────────────┘
+                │
+    ┌───────────┴────────────┐
+    │                        │
+    ▼                        ▼
+<span class="hl-green">┌─────────────────┐</span>    <span class="hl-cyan">┌──────────────────────┐</span>
+<span class="hl-green">│  ON-DEVICE       │</span>    <span class="hl-cyan">│   CLOUD              │</span>
+<span class="hl-green">│  Gemini Nano     │</span>    <span class="hl-cyan">│   Gemini 2.5 Flash   │</span>
+<span class="hl-green">│  Chrome Built-in │</span>    <span class="hl-cyan">│   Firebase AI Logic  │</span>
+<span class="hl-green">│  Zero network    │</span>    <span class="hl-cyan">│   App Check verified │</span>
+<span class="hl-green">│  Max privacy     │</span>    <span class="hl-cyan">│   Complex reasoning  │</span>
+<span class="hl-green">└─────────────────┘</span>    <span class="hl-cyan">└──────────────────────┘</span>
+         │                        │
+         └───────────┬────────────┘
+                     ▼
+         <span class="hl-yellow">response.inferenceSource</span>
+         → Telemetry badge update
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- App entrypoint (ES module) -->
+<script type="module" src="app.js"></script>
+
+</body>
+</html>
