@@ -235,6 +235,16 @@ html, body {
   animation: pulse 1.8s infinite;
 }
 
+.tel-badge.source-local {
+  background: rgba(251,191,36,.1);
+  border: 1px solid rgba(251,191,36,.3);
+  color: var(--accent-yellow);
+}
+.tel-badge.source-local .dot {
+  background: var(--accent-yellow);
+  box-shadow: 0 0 6px var(--accent-yellow);
+}
+
 .tel-badge.source-idle {
   background: rgba(92,98,128,.1);
   border: 1px solid var(--border);
