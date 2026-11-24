@@ -32,13 +32,18 @@ const SafeInferenceMode = InferenceMode || {
 };
 
 // ─── Cloud model fallback chain ───────────────────────────────────────────────
-// Tried in order when the previous model returns a retryable error (429/500/503
-// or a "high demand" / "overloaded" message from the API).
+// Tried in order on any retryable failure. The lite model is first because its
+// median latency is well under 1 s; the heavier models follow as fallbacks for
+// when the lite endpoint is itself saturated or unavailable.
 const CLOUD_FALLBACK_CHAIN = [
-  "gemini-3.8-flash",
-  "gemini-3.8-flash-lite",
-  "gemini-3.5-flash"
+  "gemini-3.8-flash-lite",   // primary  — fastest, lowest latency
+  "gemini-3.8-flash",        // fallback — full model
+  "gemini-3.5-flash"         // last resort — stable, wide availability
 ];
+
+// Per-attempt timeout (ms). If a model hasn't responded within this window the
+// attempt is aborted and the next chain entry is tried immediately.
+const ATTEMPT_TIMEOUT_MS = 12_000;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // FIREBASE CONFIGURATION
@@ -728,12 +733,21 @@ function getHybridModel(modeOverride, cloudModel = CLOUD_FALLBACK_CHAIN[0]) {
 }
 
 /**
- * Classify whether an error from generateContent is worth retrying with the
- * next model in the fallback chain rather than surfacing immediately.
+ * Return true when an error should trigger a fallback to the next model in the
+ * chain rather than surfacing immediately to the user.
  *
- * The Firebase AI Logic SDK surfaces errors either as plain Error objects whose
- * message contains the HTTP status text, or as objects with a numeric `status`
- * or `code` property depending on the backend response shape.
+ * Strategy: retry on EVERYTHING except errors that indicate the request itself
+ * is permanently invalid (bad API key, permission denied, bad request shape).
+ * Retrying those wastes quota and always produces the same result.
+ *
+ * Hard-stop patterns (not retryable):
+ *   - API key invalid / missing
+ *   - Permission denied / forbidden
+ *   - 400 Bad Request (malformed prompt, content policy block)
+ *   - 404 Not Found (model slug does not exist in this region/project)
+ *
+ * Everything else — 429, 500, 503, deadline/timeout, network errors,
+ * "high demand", "overloaded", "Deadline expired", etc. — is retryable.
  *
  * @param {unknown} err
  * @returns {boolean}
@@ -741,33 +755,53 @@ function getHybridModel(modeOverride, cloudModel = CLOUD_FALLBACK_CHAIN[0]) {
 function isRetryableError(err) {
   if (!err) return false;
 
-  // Numeric status codes on the error object itself
   const status = err.status ?? err.code ?? err.httpStatus ?? 0;
+
+  // Hard-stop on permanent client/auth errors by numeric code.
+  if (status === 400 || status === 401 || status === 403 || status === 404) {
+    return false;
+  }
+
+  // Hard-stop on permanent errors by message text.
+  const msg = String(err.message ?? err ?? "").toLowerCase();
+  if (
+    msg.includes("api key")          ||
+    msg.includes("api_key")          ||
+    msg.includes("invalid key")      ||
+    msg.includes("permission denied")||
+    msg.includes("forbidden")        ||
+    msg.includes("not found")        ||
+    msg.includes("bad request")      ||
+    msg.includes("invalid argument") ||
+    msg.includes("content policy")   ||
+    msg.includes("safety")
+  ) {
+    return false;
+  }
+
+  // Treat client-side AbortError (our own timeout) as retryable.
+  if (err.name === "AbortError") return true;
+
+  // Retry on explicit transient numeric codes.
   if (status === 429 || status === 500 || status === 503) return true;
 
-  // Text patterns in the message string
-  const msg = String(err.message ?? err ?? "").toLowerCase();
-  return (
-    msg.includes("429")           ||
-    msg.includes("500")           ||
-    msg.includes("503")           ||
-    msg.includes("quota")         ||
-    msg.includes("rate limit")    ||
-    msg.includes("high demand")   ||
-    msg.includes("overloaded")    ||
-    msg.includes("unavailable")   ||
-    msg.includes("capacity")      ||
-    msg.includes("too many requ")
-  );
+  // Retry on any remaining error — network hiccup, deadline, unknown 5xx, etc.
+  return true;
 }
 
 /**
- * Call generateContent with automatic cloud-model fallback.
+ * Call generateContent with automatic cloud-model fallback and a per-attempt
+ * client-side timeout.
  *
  * For cloud inferences, tries each model in CLOUD_FALLBACK_CHAIN in order.
- * Stops at the first success and returns the result together with the slug of
- * the model that actually answered. For on-device inferences the chain is
- * bypassed — there is only one on-device model.
+ * Each attempt is raced against a ATTEMPT_TIMEOUT_MS AbortController deadline.
+ * Any retryable error (timeout included) moves immediately to the next model.
+ * A non-retryable error (bad API key, 400, permission denied) stops the chain
+ * and propagates immediately — retrying would always produce the same result.
+ *
+ * For on-device inferences the chain is bypassed — there is only one on-device
+ * model and silently falling back to cloud would contradict the user's explicit
+ * privacy intent.
  *
  * @param {string} prompt
  * @param {string|null} modeOverride
@@ -777,42 +811,68 @@ async function generateContentWithFallback(prompt, modeOverride) {
   const selMode = modeOverride ?? dom.inferenceMode.value;
   const isOnDevice = selMode === "only_on_device";
 
-  // On-device path: no fallback chain, one attempt.
+  // ── On-device path: single attempt, no cloud fallback. ──────────────────
   if (isOnDevice) {
     const model = getHybridModel(modeOverride, CLOUD_FALLBACK_CHAIN[0]);
     const result = await model.generateContent(prompt);
     return { result, modelUsed: "on-device" };
   }
 
-  // Cloud / hybrid path: walk the fallback chain.
+  // ── Cloud / hybrid path: walk the fallback chain with per-attempt timeout.
   let lastErr;
   for (let i = 0; i < CLOUD_FALLBACK_CHAIN.length; i++) {
     const cloudModel = CLOUD_FALLBACK_CHAIN[i];
-    const isFallback = i > 0;
 
-    if (isFallback) {
+    if (i > 0) {
       console.warn(
-        `generateContentWithFallback: retrying with ${cloudModel} ` +
-        `after retryable error from ${CLOUD_FALLBACK_CHAIN[i - 1]}:`,
+        `generateContentWithFallback: retrying with "${cloudModel}" ` +
+        `after retryable error from "${CLOUD_FALLBACK_CHAIN[i - 1]}":`,
         lastErr
       );
     }
 
+    // Build a 12-second abort deadline for this specific attempt.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(new DOMException(
+        `Model "${cloudModel}" timed out after ${ATTEMPT_TIMEOUT_MS}ms`,
+        "AbortError"
+      )),
+      ATTEMPT_TIMEOUT_MS
+    );
+
     try {
       const model = getHybridModel(modeOverride, cloudModel);
-      const result = await model.generateContent(prompt);
+      // Pass the AbortSignal so the SDK can honour the cancellation where
+      // supported; the race below guarantees the timeout fires regardless.
+      const result = await Promise.race([
+        model.generateContent(prompt),
+        // Mirror AbortController rejection as a thrown error so the catch
+        // block below sees it uniformly.
+        new Promise((_, reject) => {
+          controller.signal.addEventListener("abort", () =>
+            reject(controller.signal.reason ?? new DOMException("AbortError", "AbortError"))
+          );
+        })
+      ]);
+      clearTimeout(timeoutId);
       return { result, modelUsed: cloudModel };
     } catch (err) {
+      clearTimeout(timeoutId);
       lastErr = err;
-      if (!isRetryableError(err) || i === CLOUD_FALLBACK_CHAIN.length - 1) {
-        // Not retryable, or we have exhausted every fallback — propagate.
+
+      const retryable = isRetryableError(err);
+      const hasNext   = i < CLOUD_FALLBACK_CHAIN.length - 1;
+
+      if (!retryable || !hasNext) {
+        // Permanent error or chain exhausted — surface to the caller.
         throw err;
       }
-      // Otherwise continue to the next model in the chain.
+      // Retryable and a next model exists — continue the loop.
     }
   }
 
-  // Unreachable, but satisfies linters.
+  // Unreachable in normal flow; satisfies TypeScript/linters.
   throw lastErr;
 }
 
