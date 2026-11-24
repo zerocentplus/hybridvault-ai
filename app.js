@@ -13,13 +13,23 @@ self.FIREBASE_APPCHECK_DEBUG_TOKEN = "11111111-2222-4333-8444-555555555555";
 
 // ─── Firebase SDK Imports (official gstatic CDN ES modules) ──────────────────
 import { initializeApp }
-  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+  from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 
 import { initializeAppCheck, ReCaptchaEnterpriseProvider, CustomProvider }
-  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app-check.js";
+  from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app-check.js";
 
 import { getAI, getGenerativeModel, GoogleAIBackend, InferenceMode }
-  from "https://www.gstatic.com/firebasejs/11.10.0/firebase-ai.js";
+  from "https://www.gstatic.com/firebasejs/12.6.0/firebase-ai.js";
+
+// ─── Safe InferenceMode fallback ─────────────────────────────────────────────
+// Guards against an extension or network policy blocking the CDN script, which
+// would leave InferenceMode undefined and crash the routing logic at call time.
+const SafeInferenceMode = InferenceMode || {
+  PREFER_ON_DEVICE: 'prefer_on_device',
+  ONLY_ON_DEVICE:   'only_on_device',
+  PREFER_IN_CLOUD:  'prefer_in_cloud',
+  ONLY_IN_CLOUD:    'only_in_cloud'
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // FIREBASE CONFIGURATION
@@ -167,7 +177,7 @@ HybridEdge is a client-side AI runtime abstraction layer that orchestrates infer
   Privacy: all telemetry is session-local, never transmitted
 
 3. FIREBASE AI LOGIC INTEGRATION
-  SDK: firebase-ai.js v11.10.0 (gstatic CDN)
+  SDK: firebase-ai.js v12.6.0 (gstatic CDN)
   Backend: GoogleAIBackend
   Model config:
     Cloud: { model: "gemini-2.5-flash" }
@@ -332,26 +342,47 @@ const dom = {
 // FIREBASE INITIALIZATION
 // ═════════════════════════════════════════════════════════════════════════════
 async function initFirebase() {
+  // Outer try/catch ensures a blocked CDN script or any other init failure
+  // never prevents the vault and editor from loading.
   try {
+    if (typeof initializeApp !== "function") {
+      throw new Error("firebase-app.js did not load (CDN blocked?)");
+    }
+
     state.firebaseApp = initializeApp(firebaseConfig);
     dom.dAppInit.textContent = "✓ Initialized";
     dom.dAppInit.className = "diag-card-value ok";
 
-    await initAppCheck();
+    try {
+      await initAppCheck();
+    } catch (appCheckErr) {
+      // App Check failure is non-fatal; AI calls may still succeed in dev.
+      console.warn("App Check skipped:", appCheckErr);
+    }
+
+    if (typeof getAI !== "function" || typeof GoogleAIBackend !== "function") {
+      throw new Error("firebase-ai.js did not load (CDN blocked?)");
+    }
+
     state.aiInstance = getAI(state.firebaseApp, { backend: new GoogleAIBackend() });
     state.aiInitialized = true;
 
     showToast("Firebase AI Logic ready", "success");
   } catch (err) {
     console.error("Firebase init error:", err);
-    dom.dAppInit.textContent = "✗ Error: " + err.message;
+    dom.dAppInit.textContent = "✗ " + err.message;
     dom.dAppInit.className = "diag-card-value error";
-    showToast("Firebase init failed — cloud AI unavailable", "error");
+    // Vault, editor, and sample docs remain fully functional without AI.
+    showToast("Firebase unavailable — vault works, AI disabled", "error");
   }
 }
 
 async function initAppCheck() {
   try {
+    if (typeof initializeAppCheck !== "function" || typeof CustomProvider !== "function") {
+      throw new Error("firebase-app-check.js did not load (CDN blocked?)");
+    }
+
     // Use CustomProvider as a lightweight debug-token-based provider that works
     // in all environments without requiring a reCAPTCHA site key.
     const appCheck = initializeAppCheck(state.firebaseApp, {
@@ -655,11 +686,11 @@ function scheduleSave() {
 function resolveInferenceMode(override) {
   const sel = override || dom.inferenceMode.value;
   switch (sel) {
-    case "only_on_device":    return InferenceMode.ONLY_ON_DEVICE;
-    case "prefer_in_cloud":   return InferenceMode.PREFER_IN_CLOUD;
-    case "only_in_cloud":     return InferenceMode.ONLY_IN_CLOUD;
+    case "only_on_device":    return SafeInferenceMode.ONLY_ON_DEVICE;
+    case "prefer_in_cloud":   return SafeInferenceMode.PREFER_IN_CLOUD;
+    case "only_in_cloud":     return SafeInferenceMode.ONLY_IN_CLOUD;
     case "prefer_on_device":
-    default:                  return InferenceMode.PREFER_ON_DEVICE;
+    default:                  return SafeInferenceMode.PREFER_ON_DEVICE;
   }
 }
 
