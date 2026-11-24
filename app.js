@@ -31,6 +31,15 @@ const SafeInferenceMode = InferenceMode || {
   ONLY_IN_CLOUD:    'only_in_cloud'
 };
 
+// ─── Cloud model fallback chain ───────────────────────────────────────────────
+// Tried in order when the previous model returns a retryable error (429/500/503
+// or a "high demand" / "overloaded" message from the API).
+const CLOUD_FALLBACK_CHAIN = [
+  "gemini-3.8-flash",
+  "gemini-3.8-flash-lite",
+  "gemini-3.5-flash"
+];
+
 // ═════════════════════════════════════════════════════════════════════════════
 // FIREBASE CONFIGURATION
 // ═════════════════════════════════════════════════════════════════════════════
@@ -695,9 +704,11 @@ function resolveInferenceMode(override) {
 }
 
 /**
- * Retrieve the Firebase AI Logic generative model with hybrid routing config
+ * Retrieve the Firebase AI Logic generative model with hybrid routing config.
+ * @param {string|null} modeOverride - UI selector value or null for global mode.
+ * @param {string} [cloudModel] - Cloud model slug; defaults to the chain primary.
  */
-function getHybridModel(modeOverride) {
+function getHybridModel(modeOverride, cloudModel = CLOUD_FALLBACK_CHAIN[0]) {
   if (!state.aiInitialized || !state.aiInstance) {
     throw new Error("Firebase AI Logic not initialized");
   }
@@ -706,7 +717,7 @@ function getHybridModel(modeOverride) {
 
   const modelConfig = {
     mode,
-    inCloudParams: { model: "gemini-3.8-flash" },
+    inCloudParams: { model: cloudModel },
     onDeviceParams: {
       temperature: 0.7,
       topK: 40
@@ -717,7 +728,96 @@ function getHybridModel(modeOverride) {
 }
 
 /**
- * Run a prompt through the hybrid model; updates telemetry and UI badges
+ * Classify whether an error from generateContent is worth retrying with the
+ * next model in the fallback chain rather than surfacing immediately.
+ *
+ * The Firebase AI Logic SDK surfaces errors either as plain Error objects whose
+ * message contains the HTTP status text, or as objects with a numeric `status`
+ * or `code` property depending on the backend response shape.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+function isRetryableError(err) {
+  if (!err) return false;
+
+  // Numeric status codes on the error object itself
+  const status = err.status ?? err.code ?? err.httpStatus ?? 0;
+  if (status === 429 || status === 500 || status === 503) return true;
+
+  // Text patterns in the message string
+  const msg = String(err.message ?? err ?? "").toLowerCase();
+  return (
+    msg.includes("429")           ||
+    msg.includes("500")           ||
+    msg.includes("503")           ||
+    msg.includes("quota")         ||
+    msg.includes("rate limit")    ||
+    msg.includes("high demand")   ||
+    msg.includes("overloaded")    ||
+    msg.includes("unavailable")   ||
+    msg.includes("capacity")      ||
+    msg.includes("too many requ")
+  );
+}
+
+/**
+ * Call generateContent with automatic cloud-model fallback.
+ *
+ * For cloud inferences, tries each model in CLOUD_FALLBACK_CHAIN in order.
+ * Stops at the first success and returns the result together with the slug of
+ * the model that actually answered. For on-device inferences the chain is
+ * bypassed — there is only one on-device model.
+ *
+ * @param {string} prompt
+ * @param {string|null} modeOverride
+ * @returns {Promise<{ result: object, modelUsed: string }>}
+ */
+async function generateContentWithFallback(prompt, modeOverride) {
+  const selMode = modeOverride ?? dom.inferenceMode.value;
+  const isOnDevice = selMode === "only_on_device";
+
+  // On-device path: no fallback chain, one attempt.
+  if (isOnDevice) {
+    const model = getHybridModel(modeOverride, CLOUD_FALLBACK_CHAIN[0]);
+    const result = await model.generateContent(prompt);
+    return { result, modelUsed: "on-device" };
+  }
+
+  // Cloud / hybrid path: walk the fallback chain.
+  let lastErr;
+  for (let i = 0; i < CLOUD_FALLBACK_CHAIN.length; i++) {
+    const cloudModel = CLOUD_FALLBACK_CHAIN[i];
+    const isFallback = i > 0;
+
+    if (isFallback) {
+      console.warn(
+        `generateContentWithFallback: retrying with ${cloudModel} ` +
+        `after retryable error from ${CLOUD_FALLBACK_CHAIN[i - 1]}:`,
+        lastErr
+      );
+    }
+
+    try {
+      const model = getHybridModel(modeOverride, cloudModel);
+      const result = await model.generateContent(prompt);
+      return { result, modelUsed: cloudModel };
+    } catch (err) {
+      lastErr = err;
+      if (!isRetryableError(err) || i === CLOUD_FALLBACK_CHAIN.length - 1) {
+        // Not retryable, or we have exhausted every fallback — propagate.
+        throw err;
+      }
+      // Otherwise continue to the next model in the chain.
+    }
+  }
+
+  // Unreachable, but satisfies linters.
+  throw lastErr;
+}
+
+/**
+ * Run a prompt through the hybrid model; updates telemetry and UI badges.
  */
 async function runHybridInference(prompt, modeOverride) {
   if (state.isRunning) return null;
@@ -729,24 +829,22 @@ async function runHybridInference(prompt, modeOverride) {
   const startTime = performance.now();
 
   try {
-    const model = getHybridModel(modeOverride);
-    const result = await model.generateContent(prompt);
+    const { result, modelUsed } = await generateContentWithFallback(prompt, modeOverride);
     const response = result.response;
 
     const latencyMs = Math.round(performance.now() - startTime);
     const text = response.text();
     const charCount = text.length;
 
-    // Determine actual inference source from response metadata
-    // response.inferenceSource is set by Firebase AI Logic SDK when available
+    // Determine actual inference source from response metadata.
+    // response.inferenceSource is set by the Firebase AI Logic SDK when available.
     let source = "cloud";
     if (response.inferenceSource) {
       source = String(response.inferenceSource).toLowerCase().includes("device")
         ? "on_device"
         : "cloud";
     } else {
-      // Fallback: infer from selected mode
-      const selMode = dom.inferenceMode.value;
+      const selMode = modeOverride ?? dom.inferenceMode.value;
       source = selMode === "only_on_device" ? "on_device" : "cloud";
     }
 
@@ -759,11 +857,11 @@ async function runHybridInference(prompt, modeOverride) {
       telemetry.cloudCount++;
     }
 
-    updateTelemetryUI(source, latencyMs, charCount);
+    updateTelemetryUI(source, latencyMs, charCount, modelUsed);
     updateDiagnostics();
 
     state.isRunning = false;
-    return { text, source, latencyMs, charCount };
+    return { text, source, latencyMs, charCount, modelUsed };
   } catch (err) {
     state.isRunning = false;
     throw err;
@@ -948,7 +1046,7 @@ function setOutputError(message) {
 // ═════════════════════════════════════════════════════════════════════════════
 // TELEMETRY UI UPDATES
 // ═════════════════════════════════════════════════════════════════════════════
-function updateTelemetryUI(source, latencyMs, charCount) {
+function updateTelemetryUI(source, latencyMs, charCount, modelUsed) {
   dom.latencyVal.textContent = latencyMs;
   dom.tokenVal.textContent = charCount;
 
@@ -958,7 +1056,12 @@ function updateTelemetryUI(source, latencyMs, charCount) {
     dom.sourceLabel.textContent = "ON-DEVICE GEMINI NANO";
   } else {
     badge.className = "tel-badge source-cloud";
-    dom.sourceLabel.textContent = "CLOUD GEMINI 3.8 FLASH";
+    // Show the exact model that answered, uppercased for the badge.
+    // modelUsed is e.g. "gemini-3.8-flash", "gemini-3.8-flash-lite", "gemini-3.5-flash".
+    const label = modelUsed && modelUsed !== "on-device"
+      ? "CLOUD " + modelUsed.toUpperCase()
+      : "CLOUD GEMINI 3.8 FLASH";
+    dom.sourceLabel.textContent = label;
   }
 }
 
