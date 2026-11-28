@@ -163,7 +163,7 @@ The app uses the following Firebase project:
 
 ```js
 const firebaseConfig = {
-  apiKey:            "AIzaSyC8v8yw6X69mcunOsm-S90TAOhhuh07zEE",
+  apiKey:          "YOUR_FIREBASE_API_KEY",
   authDomain:        "hybridvault-ai.firebaseapp.com",
   projectId:         "hybridvault-ai",
   storageBucket:     "hybridvault-ai.firebasestorage.app",
